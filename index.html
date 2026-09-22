@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#111">
+<title>Фотоаппарат АВС</title>
+<link rel="manifest" href='data:application/json;charset=utf-8,{"name":"Фотоаппарат АВС","short_name":"АВС Камера","start_url":".","display":"standalone","orientation":"portrait","background_color":"#111","theme_color":"#111","icons":[]}'>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+:root {
+  --bg: #111; --panel: #1e1e1e; --panel-light: #2a2a2a;
+  --accent: #ffcc00; --accent-dim: #aa8800;
+  --text: #e0e0e0; --text-dim: #777;
+  --green: #00ff88; --red: #ff3333;
+}
+html, body {
+  height: 100%; overflow: hidden; background: #000;
+  font-family: 'Segoe UI', system-ui, sans-serif; color: var(--text);
+  user-select: none; -webkit-user-select: none;
+  touch-action: none;
+}
+
+.camera-app {
+  max-width: 500px; margin: 0 auto; height: 100vh; height: 100dvh;
+  display: flex; flex-direction: column; position: relative;
+  background: var(--bg); overflow: hidden;
+}
+
+/* Brand Bar */
+.brand-bar {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 16px; background: #000; border-bottom: 1px solid #222;
+  flex-shrink: 0; z-index: 20;
+}
+.brand-name { font-weight: 700; font-size: 14px; letter-spacing: 2px; color: var(--accent); }
+.brand-info { font-size: 10px; color: var(--text-dim); display: flex; gap: 12px; }
+
+/* Viewfinder */
+.vf-wrapper {
+  position: relative; flex-shrink: 0; z-index: 10; background: #000;
+  width: 100%; padding-top: 66.66%; 
+}
+#viewfinder {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  display: block; transition: filter .15s linear;
+}
+.vf-hud { position: absolute; inset: 0; pointer-events: none; font-family: 'Courier New', monospace; }
+.vf-top {
+  position: absolute; top: 0; left: 0; right: 0; display: flex;
+  justify-content: space-between; padding: 10px 16px;
+  background: linear-gradient(180deg, rgba(0,0,0,.7), transparent); font-size: 11px;
+}
+.vf-bottom {
+  position: absolute; bottom: 0; left: 0; right: 0; padding: 12px 16px;
+  background: linear-gradient(0deg, rgba(0,0,0,.8), transparent);
+  display: flex; justify-content: space-between; align-items: center; font-size: 13px; font-weight: 700;
+}
+.vf-setting { text-align: center; }
+.vf-setting .lbl { font-size: 8px; color: var(--text-dim); font-weight: 400; display: block; margin-bottom: 2px; }
+.vf-setting .val { font-size: 14px; color: #fff; }
+.vf-mode-badge { background: var(--accent); color: #000; padding: 3px 10px; border-radius: 3px; font-weight: 700; font-size: 12px; }
+.focus-frame {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 80px; height: 80px; border: 1px solid rgba(0, 255, 136, 0.6); border-radius: 4px;
+  box-shadow: 0 0 10px rgba(0, 255, 136, 0.3);
+}
+.focus-frame::before, .focus-frame::after { content: ''; position: absolute; background: var(--green); }
+.focus-frame::before { top: 50%; left: -10px; right: -10px; height: 1px; transform: translateY(-50%); }
+.focus-frame::after { left: 50%; top: -10px; bottom: -10px; width: 1px; transform: translateX(-50%); }
+.ev-meter { display: flex; align-items: center; gap: 4px; font-size: 10px; background: rgba(0,0,0,0.6); padding: 4px 8px; border-radius: 4px; }
+.ev-bar { width: 100px; height: 6px; background: #333; border-radius: 3px; position: relative; overflow: hidden; }
+.ev-bar::after { content: ''; position: absolute; top: 0; bottom: 0; left: 50%; width: 1px; background: #666; }
+.ev-indicator { position: absolute; top: -2px; width: 4px; height: 10px; background: var(--green); border-radius: 2px; transition: left .2s; transform: translateX(-50%); }
+.ev-indicator.over { background: var(--red); }
+.zoom-indicator { position: absolute; top: 40px; right: 16px; font-size: 11px; color: var(--accent); font-family: monospace; background: rgba(0,0,0,.6); padding: 3px 8px; border-radius: 3px; }
+
+/* Lighting Button */
+.lighting-btn {
+  position: absolute; left: 15px; top: 50%; transform: translateY(-50%);
+  z-index: 25; width: 52px; height: 52px; border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6); border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #fff; font-size: 11px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center; text-align: center;
+  cursor: pointer; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.5); transition: transform 0.1s, background 0.2s;
+}
+.lighting-btn:active { transform: translateY(-50%) scale(0.95); background: rgba(0, 0, 0, 0.8); }
+
+/* Controls Container */
+.controls-container {
+  flex: 1; position: relative; overflow: hidden; display: flex; flex-direction: column;
+  background: var(--panel);
+}
+.controls-panel {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  overflow-y: auto; overflow-x: hidden; z-index: 5;
+  background: var(--panel);
+  transition: transform .4s cubic-bezier(.4,0,.2,1);
+}
+.controls-panel.collapsed { transform: translateY(calc(-100% + 48px)); }
+.panel-handle {
+  height: 48px; display: flex; align-items: center; justify-content: center; gap: 12px;
+  cursor: pointer; position: sticky; top: 0; z-index: 6;
+  background: linear-gradient(180deg, #2a2a2a, #1e1e1e); border-bottom: 1px solid #111;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+}
+.handle-icon { width: 40px; height: 4px; background: #555; border-radius: 2px; }
+.panel-handle .label { font-size: 11px; color: #888; letter-spacing: 1px; font-weight: 600; }
+.controls-body { padding: 16px 20px 40px; }
+
+/* Mode Dial */
+.mode-dial-section { display: flex; justify-content: center; margin: 10px 0 20px; }
+.mode-dial {
+  width: 120px; height: 120px; border-radius: 50%; position: relative;
+  background: radial-gradient(circle at 35% 35%, #444, #1a1a1a);
+  border: 4px solid #333; box-shadow: 0 8px 20px rgba(0,0,0,.7), inset 0 2px 5px rgba(255,255,255,.1);
+  cursor: pointer;
+}
+.dial-ring { width: 100%; height: 100%; border-radius: 50%; position: relative; transition: transform .4s cubic-bezier(.4,0,.2,1); }
+.mode-label {
+  position: absolute; top: 50%; left: 50%; font-size: 12px; font-weight: 700; color: #555;
+  cursor: pointer; transition: color .2s; width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%; background: rgba(0,0,0,.2);
+}
+.mode-label.active { color: #000; background: var(--accent); box-shadow: 0 0 10px var(--accent-dim); }
+.dial-pointer {
+  position: absolute; top: -6px; left: 50%; transform: translateX(-50%);
+  width: 0; height: 0; border-left: 8px solid transparent; border-right: 8px solid transparent;
+  border-top: 14px solid var(--red); z-index: 5; filter: drop-shadow(0 2px 2px rgba(0,0,0,.5));
+}
+.dial-center {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 24px; height: 24px; border-radius: 50%;
+  background: radial-gradient(circle, #666, #222); border: 2px solid #111; z-index: 4;
+}
+
+/* Sliders */
+.slider-group { margin: 18px 0; }
+.slider-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
+.slider-name { font-size: 12px; color: #aaa; font-weight: 600; letter-spacing: .5px; text-transform: uppercase; }
+.slider-value { font-family: 'Courier New', monospace; font-size: 16px; font-weight: 700; color: var(--accent); }
+.slider-value.auto-mode { color: #666; font-style: italic; font-size: 14px; }
+.slider-wrap { position: relative; padding: 4px 0; }
+input[type=range] {
+  -webkit-appearance: none; appearance: none; width: 100%; height: 32px;
+  background: transparent; outline: none;
+}
+input[type=range]::-webkit-slider-runnable-track { height: 6px; background: #333; border-radius: 3px; border: 1px solid #222; }
+input[type=range]::-moz-range-track { height: 6px; background: #333; border-radius: 3px; }
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 28px; height: 28px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, var(--accent), var(--accent-dim));
+  border: 2px solid #111; margin-top: -12px; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,.5);
+}
+input[type=range]::-moz-range-thumb { width: 28px; height: 28px; border-radius: 50%; background: var(--accent); border: 2px solid #111; cursor: pointer; }
+input[type=range]:disabled::-webkit-slider-thumb { background: #444; cursor: not-allowed; border-color: #222; }
+input[type=range]:disabled::-webkit-slider-runnable-track { opacity: .3; }
+.slider-ticks { display: flex; justify-content: space-between; font-size: 9px; color: #555; margin-top: 4px; padding: 0 2px; }
+
+/* Toggle */
+.toggle-row { display: flex; justify-content: space-between; align-items: center; padding: 14px 0; border-top: 1px solid #2a2a2a; border-bottom: 1px solid #2a2a2a; margin: 20px 0; }
+.toggle-label { font-size: 14px; font-weight: 600; color: #ddd; }
+.toggle-label .desc { font-size: 10px; color: #666; font-weight: 400; display: block; margin-top: 2px; }
+.toggle-switch { width: 54px; height: 30px; border-radius: 15px; background: #333; position: relative; cursor: pointer; transition: background .3s; border: 1px solid #222; }
+.toggle-switch.on { background: var(--accent); }
+.toggle-switch .knob { position: absolute; top: 2px; left: 2px; width: 24px; height: 24px; border-radius: 50%; background: #ddd; transition: left .3s; box-shadow: 0 2px 4px rgba(0,0,0,.3); }
+.toggle-switch.on .knob { left: 26px; background: #fff; }
+
+/* EV Compensation */
+.ev-comp-track { position: relative; height: 50px; display: flex; align-items: center; margin-top: 8px; }
+.ev-comp-line { width: 100%; height: 8px; background: linear-gradient(90deg, #224 0%, #224 30%, #333 45%, #333 55%, #442 70%, #442 100%); border-radius: 4px; position: relative; border: 1px solid #222; }
+.ev-comp-zero { position: absolute; left: 50%; top: -4px; bottom: -4px; width: 2px; background: #888; transform: translateX(-50%); }
+.ev-comp-marks { position: absolute; width: 100%; display: flex; justify-content: space-between; top: 16px; pointer-events: none; }
+.ev-comp-mark { font-size: 9px; color: #666; }
+.ev-comp-handle { position: absolute; top: 50%; width: 32px; height: 32px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, var(--accent), var(--accent-dim)); border: 2px solid #111; transform: translate(-50%, -50%); cursor: grab; box-shadow: 0 2px 6px rgba(0,0,0,.5); z-index: 2; transition: left .15s ease-out; }
+
+/* Shutter Area */
+.shutter-area {
+  flex-shrink: 0; height: 90px; background: linear-gradient(0deg, #111, #1a1a1a);
+  display: flex; justify-content: center; align-items: center; z-index: 30;
+  border-top: 1px solid #2a2a2a;
+}
+.shutter-btn {
+  width: 72px; height: 72px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #eee, #999);
+  border: 4px solid #333; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,.6);
+  transition: transform .08s; position: relative;
+}
+.shutter-btn:active { transform: scale(.92); }
+.shutter-btn::after { content: ''; position: absolute; inset: 6px; border-radius: 50%; border: 2px solid #777; }
+
+/* Photo Review */
+.photo-review {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 100;
+  display: none; flex-direction: column; align-items: center; justify-content: center;
+}
+.photo-review.show { display: flex; }
+.photo-review img { max-width: 90%; max-height: 65vh; border: 4px solid #fff; border-radius: 2px; box-shadow: 0 8px 32px rgba(0,0,0,.8); }
+.photo-info { margin-top: 20px; text-align: center; font-family: monospace; font-size: 13px; color: #aaa; }
+.photo-info span { margin: 0 10px; }
+.retake-btn {
+  margin-top: 24px; padding: 14px 36px; font-size: 16px; font-weight: 700;
+  background: var(--accent); color: #000; border: none; border-radius: 8px; cursor: pointer;
+  box-shadow: 0 4px 12px rgba(212,160,23,.4); transition: transform .1s;
+}
+.retake-btn:active { transform: scale(.95); }
+.review-timer { position: absolute; top: 20px; right: 20px; color: #666; font-size: 14px; font-family: monospace; background: #222; padding: 5px 10px; border-radius: 4px; }
+
+/* Shutter Flash */
+.shutter-flash { position: fixed; inset: 0; background: #fff; z-index: 99; opacity: 0; pointer-events: none; transition: opacity .08s; }
+.shutter-flash.flash { opacity: .95; transition: opacity .05s; }
+</style>
+</head>
+<body>
+
+<div class="camera-app" id="cameraApp">
+  <div class="brand-bar">
+    <div class="brand-name">ФОТОАППАРАТ АВС</div>
+    <div class="brand-info">
+      <span>🔋 100%</span>
+      <span>📷 042</span>
+    </div>
+  </div>
+
+  <div class="vf-wrapper">
+    <canvas id="viewfinder" width="900" height="600"></canvas>
+    <div class="vf-hud">
+      <div class="vf-top">
+        <span class="vf-mode-badge" id="vfMode">M</span>
+        <span style="color:#aaa; font-weight:bold;">● AF</span>
+        <span style="color:#aaa">AWB</span>
+      </div>
+      <div class="zoom-indicator" id="vfZoom">55mm</div>
+      <div class="focus-frame"></div>
+      <div class="vf-bottom">
+        <div class="vf-setting">
+          <span class="lbl">ВЫДЕРЖКА</span>
+          <span class="val" id="vfShutter">1/125</span>
+        </div>
+        <div class="vf-setting">
+          <span class="lbl">ДИАФРАГМА</span>
+          <span class="val" id="vfAperture">f/8.0</span>
+        </div>
+        <div class="vf-setting">
+          <span class="lbl">ISO</span>
+          <span class="val" id="vfIso">100</span>
+        </div>
+        <div class="ev-meter">
+          <span>-3</span>
+          <div class="ev-bar">
+            <div class="ev-indicator" id="evIndicator" style="left:50%"></div>
+          </div>
+          <span>+3</span>
+        </div>
+      </div>
+    </div>
+    <div class="lighting-btn" id="lightingBtn">
+      <span id="lightingLabel">День</span>
+    </div>
+  </div>
+
+  <div class="controls-container">
+    <div class="controls-panel" id="controlsPanel">
+      <div class="panel-handle" id="panelHandle">
+        <div class="handle-icon"></div>
+        <span class="label">ПАНЕЛЬ УПРАВЛЕНИЯ</span>
+        <div class="handle-icon"></div>
+      </div>
+      <div class="controls-body">
+        <div class="mode-dial-section">
+          <div class="mode-dial">
+            <div class="dial-pointer"></div>
+            <div class="dial-ring" id="dialRing">
+              <span class="mode-label" data-mode="M" style="transform:translate(-50%,-50%) rotate(0deg) translateY(-42px) rotate(0deg)">M</span>
+              <span class="mode-label active" data-mode="Av" style="transform:translate(-50%,-50%) rotate(72deg) translateY(-42px) rotate(-72deg)">Av</span>
+              <span class="mode-label" data-mode="Tv" style="transform:translate(-50%,-50%) rotate(144deg) translateY(-42px) rotate(-144deg)">Tv</span>
+              <span class="mode-label" data-mode="P" style="transform:translate(-50%,-50%) rotate(216deg) translateY(-42px) rotate(-216deg)">P</span>
+              <span class="mode-label" data-mode="Auto" style="transform:translate(-50%,-50%) rotate(288deg) translateY(-42px) rotate(-288deg)">Auto</span>
+            </div>
+            <div class="dial-center"></div>
+          </div>
+        </div>
+
+        <div class="slider-group">
+          <div class="slider-header">
+            <span class="slider-name">ДИАФРАГМА (Av)</span>
+            <span class="slider-value" id="apertureVal">f/8.0</span>
+          </div>
+          <div class="slider-wrap"><input type="range" id="apertureSlider" min="0" max="6" step="1" value="3"></div>
+          <div class="slider-ticks"><span>f/2.8</span><span>f/4</span><span>f/5.6</span><span>f/8</span><span>f/11</span><span>f/16</span><span>f/22</span></div>
+        </div>
+
+        <div class="slider-group">
+          <div class="slider-header">
+            <span class="slider-name">ВЫДЕРЖКА (Tv)</span>
+            <span class="slider-value" id="shutterVal">1/125</span>
+          </div>
+          <div class="slider-wrap"><input type="range" id="shutterSlider" min="0" max="15" step="1" value="7"></div>
+          <div class="slider-ticks"><span>1/4000</span><span>1/1000</span><span>1/250</span><span>1/60</span><span>1/15</span><span>1/4</span><span>1/2</span><span>2"</span></div>
+        </div>
+
+        <div class="slider-group">
+          <div class="slider-header">
+            <span class="slider-name">ISO</span>
+            <span class="slider-value" id="isoVal">100</span>
+          </div>
+          <div class="slider-wrap"><input type="range" id="isoSlider" min="0" max="6" step="1" value="0"></div>
+          <div class="slider-ticks"><span>100</span><span>200</span><span>400</span><span>800</span><span>1600</span><span>3200</span><span>6400</span></div>
+        </div>
+
+        <div class="toggle-row">
+          <div class="toggle-label">
+            АВТО ISO (Auto ISO)
+            <span class="desc">Компенсация экспозиции автоматически</span>
+          </div>
+          <div class="toggle-switch" id="autoIsoToggle"><div class="knob"></div></div>
+        </div>
+
+        <div class="slider-group">
+          <div class="slider-header">
+            <span class="slider-name">КОМПЕНСАЦИЯ ЭКСПОЗИЦИИ</span>
+            <span class="slider-value" id="evVal">0.0</span>
+          </div>
+          <div class="ev-comp-track">
+            <div class="ev-comp-line" id="evLine"><div class="ev-comp-zero"></div></div>
+            <div class="ev-comp-marks"><span>-3</span><span>-2</span><span>-1</span><span>0</span><span>+1</span><span>+2</span><span>+3</span></div>
+            <div class="ev-comp-handle" id="evHandle" style="left: 50%"></div>
+          </div>
+        </div>
+
+        <div class="slider-group">
+          <div class="slider-header">
+            <span class="slider-name">ЗУМ (ФОКУСНОЕ РАССТОЯНИЕ)</span>
+            <span class="slider-value" id="zoomVal">55mm</span>
+          </div>
+          <div class="slider-wrap"><input type="range" id="zoomSlider" min="18" max="200" step="1" value="55"></div>
+          <div class="slider-ticks"><span>18mm</span><span>50mm</span><span>85mm</span><span>135mm</span><span>200mm</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="shutter-area"><div class="shutter-btn" id="shutterBtn"></div></div>
+
+  <div class="photo-review" id="photoReview">
+    <div class="review-timer" id="reviewTimer">4с</div>
+    <img id="reviewImg" src="">
+    <div class="photo-info">
+      <span id="revInfoShutter">1/125</span> | <span id="revInfoAperture">f/8.0</span> | <span id="revInfoIso">ISO 100</span> | <span id="revInfoZoom">55mm</span>
+    </div>
+    <button class="retake-btn" id="retakeBtn">Фотографируем ещё</button>
+  </div>
+  <div class="shutter-flash" id="shutterFlash"></div>
+</div>
+
+<script>
+const canvas = document.getElementById('viewfinder');
+const ctx = canvas.getContext('2d');
+
+// Офскрин холст для фона (небо, облака, земля)
+const bgCanvas = document.createElement('canvas');
+bgCanvas.width = 900; bgCanvas.height = 600;
+const bgCtx = bgCanvas.getContext('2d');
+
+// Офскрин холст для забора
+const fenceCanvas = document.createElement('canvas');
+fenceCanvas.width = 900; fenceCanvas.height = 600;
+const fenceCtx = fenceCanvas.getContext('2d');
+
+// Генерация текстуры шума для высоких ISO
+const noiseCanvas = document.createElement('canvas');
+noiseCanvas.width = 256; noiseCanvas.height = 256;
+const nCtx = noiseCanvas.getContext('2d');
+const imgData = nCtx.createImageData(256, 256);
+for (let i = 0; i < imgData.data.length; i += 4) {
+  const val = Math.random() * 255;
+  imgData.data[i] = val; imgData.data[i+1] = val; imgData.data[i+2] = val; imgData.data[i+3] = 255;
+}
+nCtx.putImageData(imgData, 0, 0);
+const noisePattern = ctx.createPattern(noiseCanvas, 'repeat');
+
+const apertures = [2.8, 4.0, 5.6, 8.0, 11.0, 16.0, 22.0];
+const shutters = [1/4000, 1/2000, 1/1000, 1/500, 1/250, 1/200, 1/160, 1/125, 1/60, 1/30, 1/15, 1/8, 1/4, 1/2, 1, 2];
+const isos = [100, 200, 400, 800, 1600, 3200, 6400];
+
+// Настройки освещения
+const lightings = [
+  { name: 'Утро', skyTop: '#2a4a6a', skyBot: '#ffcaa0', sunX: 0.2, sunY: 0.5, sunColor: 'rgba(255,255,200,0.9)', sunSize: 35, tint: 'rgba(100, 150, 255, 0.15)', baseEV: 0.3 },
+  { name: 'День', skyTop: '#3b5f7a', skyBot: '#90b4c9', sunX: 0.8, sunY: 0.15, sunColor: 'rgba(255,255,230,1)', sunSize: 25, tint: 'rgba(0,0,0,0)', baseEV: 1.0 },
+  { name: 'Вечер', skyTop: '#1a1a3a', skyBot: '#ff4500', sunX: 0.8, sunY: 0.55, sunColor: 'rgba(255, 80, 30, 1)', sunSize: 50, tint: 'rgba(255, 100, 30, 0.3)', baseEV: 0.15 }
+];
+
+let state = {
+  mode: 'Av', aptIdx: 3, shutIdx: 7, isoIdx: 0,
+  autoIso: false, evComp: 0, zoom: 55,
+  bladeAngle: 0, isShooting: false, lighting: 1
+};
+let lastTime = performance.now();
+
+const els = {
+  vfMode: document.getElementById('vfMode'), vfShutter: document.getElementById('vfShutter'),
+  vfAperture: document.getElementById('vfAperture'), vfIso: document.getElementById('vfIso'),
+  vfZoom: document.getElementById('vfZoom'), evIndicator: document.getElementById('evIndicator'),
+  apertureSlider: document.getElementById('apertureSlider'), shutterSlider: document.getElementById('shutterSlider'),
+  isoSlider: document.getElementById('isoSlider'), zoomSlider: document.getElementById('zoomSlider'),
+  apertureVal: document.getElementById('apertureVal'), shutterVal: document.getElementById('shutterVal'),
+  isoVal: document.getElementById('isoVal'), zoomVal: document.getElementById('zoomVal'),
+  evVal: document.getElementById('evVal'), autoIsoToggle: document.getElementById('autoIsoToggle'),
+  evHandle: document.getElementById('evHandle'), dialRing: document.getElementById('dialRing'),
+  controlsPanel: document.getElementById('controlsPanel'), panelHandle: document.getElementById('panelHandle'),
+  shutterBtn: document.getElementById('shutterBtn'), shutterFlash: document.getElementById('shutterFlash'),
+  photoReview: document.getElementById('photoReview'), reviewImg: document.getElementById('reviewImg'),
+  reviewTimer: document.getElementById('reviewTimer'), retakeBtn: document.getElementById('retakeBtn'),
+  lightingBtn: document.getElementById('lightingBtn'), lightingLabel: document.getElementById('lightingLabel')
+};
+
+function formatShutter(val) { return val >= 1 ? val + '"' : '1/' + Math.round(1/val); }
+
+function updateUI() {
+  const N = apertures[state.aptIdx]; const t = shutters[state.shutIdx]; const iso = isos[state.isoIdx];
+  els.vfMode.innerText = state.mode; els.vfShutter.innerText = formatShutter(t);
+  els.vfAperture.innerText = 'f/' + N.toFixed(1); els.vfIso.innerText = state.autoIso ? "AUTO" : iso;
+  els.vfZoom.innerText = state.zoom + 'mm'; els.apertureVal.innerText = 'f/' + N.toFixed(1);
+  els.shutterVal.innerText = formatShutter(t); els.isoVal.innerText = state.autoIso ? "AUTO" : iso;
+  els.zoomVal.innerText = state.zoom + 'mm'; els.evVal.innerText = (state.evComp > 0 ? '+' : '') + state.evComp.toFixed(1);
+  els.evHandle.style.left = (50 + (state.evComp / 3) * 45) + '%';
+  els.apertureSlider.disabled = (state.mode === 'Tv' || state.mode === 'Auto' || state.mode === 'P');
+  els.shutterSlider.disabled = (state.mode === 'Av' || state.mode === 'Auto' || state.mode === 'P');
+  els.isoSlider.disabled = state.autoIso;
+  if (state.autoIso) els.isoVal.classList.add('auto-mode'); else els.isoVal.classList.remove('auto-mode');
+  let rotation = 0;
+  if (state.mode === 'Av') rotation = -72; if (state.mode === 'Tv') rotation = -144;
+  if (state.mode === 'P') rotation = -216; if (state.mode === 'Auto') rotation = -288;
+  els.dialRing.style.transform = `rotate(${rotation}deg)`;
+  document.querySelectorAll('.mode-label').forEach(l => l.classList.toggle('active', l.dataset.mode === state.mode));
+  els.lightingLabel.innerText = lightings[state.lighting].name;
+}
+
+function calculateExposure() {
+  let N = apertures[state.aptIdx]; let t = shutters[state.shutIdx]; let iso = isos[state.isoIdx];
+  const lightBase = lightings[state.lighting].baseEV;
+  const ev0_light = ((1/125) / (8*8)) * (100/100); 
+  let target_light = ev0_light * Math.pow(2, state.evComp);
+
+  if (state.autoIso) {
+    let required_iso = (ev0_light * (N*N) / t) / lightBase * 100;
+    required_iso = Math.max(100, Math.min(6400, required_iso));
+    let closest_iso = isos.reduce((prev, curr) => Math.abs(curr - required_iso) < Math.abs(prev - required_iso) ? curr : prev);
+    state.isoIdx = isos.indexOf(closest_iso); iso = closest_iso;
+  } else {
+    if (state.mode === 'Av') {
+      let required_t = (target_light * (N*N)) / ((iso / 100) * lightBase);
+      required_t = Math.max(1/4000, Math.min(2, required_t));
+      let closest_t = shutters.reduce((prev, curr) => Math.abs(curr - required_t) < Math.abs(prev - required_t) ? curr : prev);
+      state.shutIdx = shutters.indexOf(closest_t); t = closest_t;
+    } else if (state.mode === 'Tv') {
+      let required_N_sq = (t * (iso / 100) * lightBase) / target_light;
+      let required_N = Math.sqrt(required_N_sq);
+      required_N = Math.max(2.8, Math.min(22, required_N));
+      let closest_N = apertures.reduce((prev, curr) => Math.abs(curr - required_N) < Math.abs(prev - required_N) ? curr : prev);
+      state.aptIdx = apertures.indexOf(closest_N); N = closest_N;
+    }
+  }
+
+  let current_light = ((t / (N*N)) * (iso / 100)) * lightBase;
+  let brightness = current_light / ev0_light;
+  if ((state.mode === 'M' && !state.autoIso) || state.autoIso) {
+    brightness = brightness * Math.pow(2, state.evComp);
+  }
+
+  brightness = Math.max(0.05, Math.min(8.0, brightness));
+  canvas.style.filter = `brightness(${brightness})`;
+
+  let ev_diff = Math.log2(current_light / target_light);
+  if (state.autoIso) ev_diff = Math.log2(current_light / ev0_light);
+  let ev_percent = 50 + (ev_diff / 3) * 45;
+  ev_percent = Math.max(0, Math.min(100, ev_percent));
+  els.evIndicator.style.left = ev_percent + '%';
+  els.evIndicator.classList.remove('over', 'under');
+  if (ev_percent > 55) els.evIndicator.classList.add('over');
+  if (ev_percent < 45) els.evIndicator.classList.add('under');
+  updateUI();
+}
+
+function applyZoom(targetCtx, zoom) {
+  const w = targetCtx.canvas.width; const h = targetCtx.canvas.height;
+  const scale = zoom / 55; const focusX = w * 0.5; const focusY = h * 0.225;
+  targetCtx.save();
+  targetCtx.translate(focusX, focusY); targetCtx.scale(scale, scale); targetCtx.translate(-focusX, -focusY);
+}
+
+// Фотореалистичная отрисовка фона
+function drawBackground(targetCtx, zoom) {
+  const w = targetCtx.canvas.width; const h = targetCtx.canvas.height; const lighting = lightings[state.lighting];
+  applyZoom(targetCtx, zoom);
+
+  // 1. Небо с градиентом
+  const skyGrad = targetCtx.createLinearGradient(0, -h, 0, h * 0.8);
+  skyGrad.addColorStop(0, lighting.skyTop); 
+  skyGrad.addColorStop(0.6, lighting.skyBot);
+  skyGrad.addColorStop(1, '#e0e0e0'); // Дымка у горизонта
+  targetCtx.fillStyle = skyGrad; targetCtx.fillRect(-w, -h, w * 3, h * 3);
+
+  // 2. Солнце и свечение
+  const sunX = w * lighting.sunX; const sunY = h * lighting.sunY; const sunSize = lighting.sunSize;
+  const sunGlow = targetCtx.createRadialGradient(sunX, sunY, sunSize, sunX, sunY, sunSize * 6);
+  sunGlow.addColorStop(0, lighting.sunColor); sunGlow.addColorStop(0.5, 'rgba(255,255,200,0.2)'); sunGlow.addColorStop(1, 'rgba(0,0,0,0)');
+  targetCtx.fillStyle = sunGlow; targetCtx.beginPath(); targetCtx.arc(sunX, sunY, sunSize * 6, 0, Math.PI * 2); targetCtx.fill();
+  targetCtx.fillStyle = lighting.sunColor; targetCtx.beginPath(); targetCtx.arc(sunX, sunY, sunSize, 0, Math.PI * 2); targetCtx.fill();
+
+  // 3. Облака
+  drawCloud(targetCtx, w * 0.2, h * 0.15, 80, 0.8); 
+  drawCloud(targetCtx, w * 0.7, h * 0.2, 100, 0.6); 
+  drawCloud(targetCtx, w * 0.5, h * 0.08, 60, 0.7);
+
+  // 4. Далёкие холмы (воздушная перспектива)
+  targetCtx.fillStyle = 'rgba(100, 130, 150, 0.5)';
+  targetCtx.beginPath(); 
+  targetCtx.moveTo(-w, h * 0.65); 
+  targetCtx.quadraticCurveTo(w * 0.3, h * 0.55, w * 0.6, h * 0.62);
+  targetCtx.quadraticCurveTo(w * 0.9, h * 0.68, w * 2, h * 0.6);
+  targetCtx.lineTo(w * 2, h); targetCtx.lineTo(-w, h); targetCtx.closePath(); targetCtx.fill();
+
+  targetCtx.fillStyle = 'rgba(80, 110, 80, 0.6)';
+  targetCtx.beginPath(); 
+  targetCtx.moveTo(-w, h * 0.7); 
+  targetCtx.quadraticCurveTo(w * 0.4, h * 0.62, w * 0.8, h * 0.68);
+  targetCtx.quadraticCurveTo(w * 1.2, h * 0.75, w * 2, h * 0.65);
+  targetCtx.lineTo(w * 2, h); targetCtx.lineTo(-w, h); targetCtx.closePath(); targetCtx.fill();
+
+  // 5. Земля (трава)
+  const groundGrad = targetCtx.createLinearGradient(0, h * 0.65, 0, h * 2);
+  groundGrad.addColorStop(0, '#4a6a2a'); groundGrad.addColorStop(0.5, '#384a20'); groundGrad.addColorStop(1, '#1a2a10');
+  targetCtx.fillStyle = groundGrad;
+  targetCtx.beginPath(); 
+  targetCtx.moveTo(-w, h * 0.68); targetCtx.quadraticCurveTo(w * 0.5, h * 0.62, w * 2, h * 0.72);
+  targetCtx.lineTo(w * 2, h * 2); targetCtx.lineTo(-w, h * 2); targetCtx.closePath(); targetCtx.fill();
+
+  // Детали травы (штрихи)
+  targetCtx.strokeStyle = 'rgba(60, 80, 30, 0.5)'; targetCtx.lineWidth = 2;
+  for(let i = 0; i < 150; i++) {
+    let x = -w + Math.random() * (w * 3);
+    let y = h * 0.7 + Math.random() * (h * 0.3);
+    targetCtx.beginPath(); targetCtx.moveTo(x, y); targetCtx.lineTo(x + Math.random() * 5 - 2, y - Math.random() * 8); targetCtx.stroke();
+  }
+
+  // 6. Тропинка
+  targetCtx.strokeStyle = '#7a6a4a'; targetCtx.lineWidth = 20;
+  targetCtx.beginPath(); targetCtx.moveTo(w * 0.1, h * 2); targetCtx.quadraticCurveTo(w * 0.4, h * 0.85, w * 0.5, h * 0.72); targetCtx.stroke();
+  // Текстура тропинки
+  targetCtx.strokeStyle = '#5a4a2a'; targetCtx.lineWidth = 2;
+  for(let i=0; i<30; i++) {
+    let y = h * 0.75 + Math.random() * (h * 1.2);
+    let x1 = w * 0.1 + (y - h * 0.75) * 0.3;
+    let x2 = w * 0.1 + (y - h * 0.75) * 0.3 + 15;
+    targetCtx.beginPath(); targetCtx.moveTo(x1, y); targetCtx.lineTo(x2, y); targetCtx.stroke();
+  }
+
+  targetCtx.restore();
+}
+
+// Фотореалистичное тело мельницы
+function drawMillBody(targetCtx, zoom) {
+  const w = targetCtx.canvas.width; const h = targetCtx.canvas.height;
+  applyZoom(targetCtx, zoom);
+
+  const millX = w * 0.5; const millY = h * 0.72; const millW = w * 0.15; const millH = h * 0.45;
+  
+  // Тень от мельницы
+  targetCtx.fillStyle = 'rgba(0,0,0,0.4)';
+  targetCtx.beginPath(); targetCtx.ellipse(millX - millW * 0.2, millY + 10, millW * 1.2, millH * 0.08, 0, 0, Math.PI * 2); targetCtx.fill();
+
+  // Каменный фундамент
+  targetCtx.fillStyle = '#5a5a5a';
+  targetCtx.beginPath();
+  targetCtx.moveTo(millX - millW * 0.45, millY);
+  targetCtx.lineTo(millX + millW * 0.45, millY);
+  targetCtx.lineTo(millX + millW * 0.45, millY - 40);
+  targetCtx.lineTo(millX - millW * 0.45, millY - 40);
+  targetCtx.closePath(); targetCtx.fill();
+  targetCtx.strokeStyle = '#3a3a3a'; targetCtx.lineWidth = 2; targetCtx.stroke();
+  // Текстура камней
+  targetCtx.strokeStyle = 'rgba(0,0,0,0.3)'; targetCtx.lineWidth = 1;
+  for(let i=0; i<5; i++) {
+    targetCtx.beginPath();
+    targetCtx.moveTo(millX - millW * 0.45 + i * (millW * 0.18), millY);
+    targetCtx.lineTo(millX - millW * 0.45 + i * (millW * 0.18) + 5, millY - 40);
+    targetCtx.stroke();
+  }
+
+  // Тело мельницы (трапеция)
+  const bodyGrad = targetCtx.createLinearGradient(millX - millW * 0.4, 0, millX + millW * 0.4, 0);
+  bodyGrad.addColorStop(0, '#3a1d08'); // Тень слева
+  bodyGrad.addColorStop(0.3, '#6b3e1e');
+  bodyGrad.addColorStop(0.7, '#8b4513');
+  bodyGrad.addColorStop(1, '#4a2509'); // Тень справа
+  targetCtx.fillStyle = bodyGrad; 
+  targetCtx.strokeStyle = '#2a1505'; targetCtx.lineWidth = 2;
+  targetCtx.beginPath();
+  targetCtx.moveTo(millX - millW * 0.4, millY - 40); 
+  targetCtx.lineTo(millX + millW * 0.4, millY - 40);
+  targetCtx.lineTo(millX + millW * 0.35, millY - millH);
+  targetCtx.lineTo(millX - millW * 0.35, millY - millH);
+  targetCtx.closePath(); targetCtx.fill(); targetCtx.stroke();
+
+  // Объёмные доски
+  targetCtx.strokeStyle = 'rgba(0,0,0,0.6)'; targetCtx.lineWidth = 2;
+  for(let i = 1; i < 10; i++) {
+    let y = millY - 40 - (millH / 10) * i;
+    let wRatio = 1 - (i / 10) * 0.1;
+    targetCtx.beginPath(); 
+    targetCtx.moveTo(millX - millW * 0.4 * wRatio, y); 
+    targetCtx.lineTo(millX + millW * 0.4 * wRatio, y); 
+    targetCtx.stroke();
+  }
+  // Световые блики на досках
+  targetCtx.strokeStyle = 'rgba(255,200,150,0.2)'; targetCtx.lineWidth = 1;
+  for(let i = 1; i < 10; i++) {
+    let y = millY - 40 - (millH / 10) * i - 1;
+    let wRatio = 1 - (i / 10) * 0.1;
+    targetCtx.beginPath(); 
+    targetCtx.moveTo(millX - millW * 0.4 * wRatio, y); 
+    targetCtx.lineTo(millX + millW * 0.4 * wRatio, y); 
+    targetCtx.stroke();
+  }
+
+  // Окно
+  targetCtx.fillStyle = '#1a1a1a'; targetCtx.fillRect(millX - 15, millY - millH * 0.5, 30, 35);
+  targetCtx.fillStyle = 'rgba(100,150,200,0.3)'; targetCtx.fillRect(millX - 13, millY - millH * 0.5 + 2, 26, 31); // Отражение
+  targetCtx.strokeStyle = '#5a3a1a'; targetCtx.lineWidth = 3; targetCtx.strokeRect(millX - 15, millY - millH * 0.5, 30, 35);
+  targetCtx.beginPath(); targetCtx.moveTo(millX, millY - millH * 0.5); targetCtx.lineTo(millX, millY - millH * 0.5 + 35);
+  targetCtx.moveTo(millX - 15, millY - millH * 0.5 + 17); targetCtx.lineTo(millX + 15, millY - millH * 0.5 + 17); targetCtx.stroke();
+
+  // Дверь
+  targetCtx.fillStyle = '#2a1505'; targetCtx.fillRect(millX - 20, millY - 60, 40, 60);
+  targetCtx.strokeStyle = '#1a0d04'; targetCtx.lineWidth = 2; targetCtx.strokeRect(millX - 20, millY - 60, 40, 60);
+  targetCtx.beginPath(); targetCtx.moveTo(millX, millY - 60); targetCtx.lineTo(millX, millY); // Шов
+  targetCtx.moveTo(millX - 20, millY - 30); targetCtx.lineTo(millX + 20, millY - 30); targetCtx.stroke();
+  targetCtx.fillStyle = '#ffcc00'; targetCtx.beginPath(); targetCtx.arc(millX + 12, millY - 30, 2, 0, Math.PI * 2); targetCtx.fill(); // Ручка
+
+  // Крыша (черепица)
+  const roofGrad = targetCtx.createLinearGradient(millX, millY - millH, millX, millY - millH * 1.2);
+  roofGrad.addColorStop(0, '#2a1a05'); roofGrad.addColorStop(1, '#5a3a1a');
+  targetCtx.fillStyle = roofGrad;
+  targetCtx.beginPath();
+  targetCtx.moveTo(millX - millW * 0.45, millY - millH); 
+  targetCtx.lineTo(millX + millW * 0.45, millY - millH);
+  targetCtx.lineTo(millX, millY - millH * 1.2);
+  targetCtx.closePath(); targetCtx.fill();
+  targetCtx.strokeStyle = '#1a0d04'; targetCtx.lineWidth = 2; targetCtx.stroke();
+  
+  // Линии черепицы
+  targetCtx.strokeStyle = 'rgba(0,0,0,0.5)'; targetCtx.lineWidth = 1;
+  for(let i=1; i<4; i++) {
+    let y1 = millY - millH - (millH * 0.2 / 4) * i;
+    let x_ratio = 1 - (i / 4);
+    targetCtx.beginPath();
+    targetCtx.moveTo(millX - millW * 0.45 * x_ratio, y1);
+    targetCtx.lineTo(millX, y1 - 5);
+    targetCtx.lineTo(millX + millW * 0.45 * x_ratio, y1);
+    targetCtx.stroke();
+  }
+
+  targetCtx.restore();
+}
+
+function drawMillBlades(targetCtx, angle, zoom) {
+  const w = targetCtx.canvas.width; const h = targetCtx.canvas.height;
+  applyZoom(targetCtx, zoom);
+  const millX = w * 0.5; const millY = h * 0.72; const millW = w * 0.15; const millH = h * 0.45;
+  drawBlades(targetCtx, millX, millY - millH * 1.1, millW, angle);
+  targetCtx.restore();
+}
+
+function drawForegroundFence(targetCtx, zoom) {
+  const w = fenceCtx.canvas.width; const h = fenceCtx.canvas.height;
+  fenceCtx.clearRect(0, 0, w, h);
+  applyZoom(fenceCtx, zoom);
+  
+  const fenceY = h * 0.88;
+  // Горизонтальные перекладины
+  fenceCtx.fillStyle = '#3a2a1a';
+  fenceCtx.fillRect(-w, fenceY, w * 3, 8);
+  fenceCtx.fillRect(-w, fenceY + 35, w * 3, 8);
+  fenceCtx.strokeStyle = '#1a100a'; fenceCtx.lineWidth = 1;
+  fenceCtx.strokeRect(-w, fenceY, w * 3, 8);
+  fenceCtx.strokeRect(-w, fenceY + 35, w * 3, 8);
+  
+  // Вертикальные столбы
+  const postWidth = 18; const gap = 220;
+  for (let x = -w * 0.5; x < w * 2; x += gap) {
+    // Тень столба
+    fenceCtx.fillStyle = 'rgba(0,0,0,0.3)';
+    fenceCtx.fillRect(x + 2, fenceY - 30, postWidth, 90);
+    // Сам столб
+    const grad = fenceCtx.createLinearGradient(x, 0, x + postWidth, 0);
+    grad.addColorStop(0, '#2a1a10'); grad.addColorStop(0.5, '#5a4528'); grad.addColorStop(1, '#3a2a1a');
+    fenceCtx.fillStyle = grad;
+    fenceCtx.fillRect(x, fenceY - 30, postWidth, 90);
+    fenceCtx.strokeStyle = '#1a100a'; fenceCtx.lineWidth = 1.5; fenceCtx.strokeRect(x, fenceY - 30, postWidth, 90);
+  }
+  fenceCtx.restore();
+}
+
+function drawBlades(c, x, y, size, angle) {
+  c.save(); c.translate(x, y); c.rotate(angle);
+  const bladeLen = size * 1.3; const bladeW = size * 0.3;
+  
+  // Вал
+  c.fillStyle = '#222'; c.beginPath(); c.arc(0, 0, 12, 0, Math.PI * 2); c.fill();
+  c.strokeStyle = '#111'; c.lineWidth = 2; c.stroke();
+
+  // 4 лопасти
+  for (let i = 0; i < 4; i++) {
+    c.save(); c.rotate((Math.PI / 2) * i);
+    
+    // Объёмная рама лопасти
+    c.fillStyle = '#2a1505'; c.fillRect(0, -bladeW/2, bladeLen, bladeW);
+    c.fillStyle = '#4a2509'; c.fillRect(0, -bladeW/2, bladeLen, bladeW/2); // Светлая часть рамы
+    
+    // Парусина с градиентом
+    const grad = c.createLinearGradient(0, -bladeW/2, 0, bladeW/2);
+    grad.addColorStop(0, '#e0d0a0'); grad.addColorStop(0.3, '#f0e0b0'); 
+    grad.addColorStop(0.7, '#d0c090'); grad.addColorStop(1, '#b0a070');
+    c.fillStyle = grad; c.fillRect(4, -bladeW/2 + 4, bladeLen - 8, bladeW - 8);
+    
+    // Перекладины
+    c.strokeStyle = '#3a1d08'; c.lineWidth = 4;
+    for(let j=1; j<5; j++) { 
+      c.beginPath(); c.moveTo((bladeLen/5)*j, -bladeW/2); c.lineTo((bladeLen/5)*j, bladeW/2); c.stroke(); 
+    }
+    c.restore();
+  }
+  
+  // УВЕЛИЧЕННЫЙ КРАСНЫЙ КРУГ (0.9)
+  const ringRadius = bladeW * 0.9; 
+  const metalGrad = c.createRadialGradient(-ringRadius*0.3, -ringRadius*0.3, 2, 0, 0, ringRadius);
+  metalGrad.addColorStop(0, '#ff4444'); metalGrad.addColorStop(0.8, '#d10000'); metalGrad.addColorStop(1, '#8a0000');
+  c.fillStyle = metalGrad; 
+  c.beginPath(); c.arc(0, 0, ringRadius, 0, Math.PI * 2); c.fill();
+  
+  c.strokeStyle = '#5a0000'; c.lineWidth = 2; c.stroke();
+
+  // Чёрный пятачок
+  const centerRadius = ringRadius * 0.35; 
+  c.fillStyle = '#000000';
+  c.beginPath(); c.arc(0, 0, centerRadius, 0, Math.PI * 2); c.fill();
+  
+  c.restore();
+}
+
+function drawCloud(c, x, y, size, opacity) {
+  c.save();
+  c.globalAlpha = opacity;
+  // Тень облака
+  c.fillStyle = 'rgba(80, 80, 90, 0.5)';
+  c.beginPath();
+  c.arc(x, y + 5, size * 0.5, 0, Math.PI * 2); c.arc(x + size * 0.4, y + 4, size * 0.4, 0, Math.PI * 2);
+  c.arc(x - size * 0.4, y + 5, size * 0.3, 0, Math.PI * 2); c.arc(x + size * 0.2, y + size * 0.2 + 5, size * 0.35, 0, Math.PI * 2);
+  c.fill();
+  // Светлая часть облака
+  c.fillStyle = 'rgba(255, 255, 255, 0.9)';
+  c.beginPath();
+  c.arc(x, y, size * 0.5, 0, Math.PI * 2); c.arc(x + size * 0.4, y - size * 0.1, size * 0.4, 0, Math.PI * 2);
+  c.arc(x - size * 0.4, y, size * 0.3, 0, Math.PI * 2); c.arc(x + size * 0.2, y + size * 0.2, size * 0.35, 0, Math.PI * 2);
+  c.fill();
+  c.restore();
+}
+
+function animate(time) {
+  const dt = (time - lastTime) / 1000; lastTime = time;
+  if (!state.isShooting) {
+    state.bladeAngle += (2 * Math.PI) * dt;
+    
+    drawBackground(bgCtx, state.zoom);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    const blurAmount = Math.max(0, (6 - state.aptIdx)) * 1.8;
+    
+    if (blurAmount > 0.1) ctx.filter = `blur(${blurAmount}px)`;
+    ctx.drawImage(bgCanvas, 0, 0);
+    ctx.filter = 'none';
+    
+    drawMillBody(ctx, state.zoom);
+    
+    const t = shutters[state.shutIdx];
+    if (t > 1/60) {
+      const blurSteps = Math.min(30, Math.ceil(t * 30));
+      const stepAngle = (2 * Math.PI) * t / blurSteps;
+      ctx.globalAlpha = 1.0 / blurSteps;
+      for(let i = 1; i <= blurSteps; i++) drawMillBlades(ctx, state.bladeAngle - i * stepAngle, state.zoom);
+      ctx.globalAlpha = 1.0;
+    } else {
+      drawMillBlades(ctx, state.bladeAngle, state.zoom);
+    }
+    
+    drawForegroundFence(ctx, state.zoom);
+    if (blurAmount > 0.1) ctx.filter = `blur(${blurAmount}px)`;
+    ctx.drawImage(fenceCanvas, 0, 0);
+    ctx.filter = 'none';
+    
+    const lighting = lightings[state.lighting];
+    if (lighting.tint !== 'rgba(0,0,0,0)') { ctx.fillStyle = lighting.tint; ctx.fillRect(0, 0, canvas.width, canvas.height); }
+    
+    const iso = isos[state.isoIdx];
+    if (iso > 800) {
+      let noiseAlpha = 0;
+      if (iso === 1600) noiseAlpha = 0.08;
+      if (iso === 3200) noiseAlpha = 0.16;
+      if (iso === 6400) noiseAlpha = 0.28;
+      ctx.globalAlpha = noiseAlpha;
+      ctx.fillStyle = noisePattern;
+      const randX = Math.floor(Math.random() * 256); const randY = Math.floor(Math.random() * 256);
+      ctx.translate(randX, randY); ctx.fillRect(-randX, -randY, canvas.width, canvas.height); ctx.translate(-randX, -randY);
+      ctx.globalAlpha = 1.0;
+    }
+  }
+  requestAnimationFrame(animate);
+}
+
+// Events
+els.apertureSlider.addEventListener('input', (e) => { state.aptIdx = parseInt(e.target.value); calculateExposure(); });
+els.shutterSlider.addEventListener('input', (e) => { state.shutIdx = parseInt(e.target.value); calculateExposure(); });
+els.isoSlider.addEventListener('input', (e) => { state.isoIdx = parseInt(e.target.value); calculateExposure(); });
+els.zoomSlider.addEventListener('input', (e) => { state.zoom = parseInt(e.target.value); calculateExposure(); });
+els.lightingBtn.addEventListener('click', () => { state.lighting = (state.lighting + 1) % 3; calculateExposure(); });
+els.autoIsoToggle.addEventListener('click', () => { state.autoIso = !state.autoIso; els.autoIsoToggle.classList.toggle('on', state.autoIso); calculateExposure(); });
+
+let isDraggingEv = false; const evLine = document.getElementById('evLine');
+function setEv(clientX) {
+  const rect = evLine.getBoundingClientRect(); let percent = (clientX - rect.left) / rect.width;
+  percent = Math.max(0, Math.min(1, percent)); let val = Math.round((percent - 0.5) * 6);
+  state.evComp = val; calculateExposure();
+}
+els.evHandle.addEventListener('touchstart', (e) => { isDraggingEv = true; e.preventDefault(); }, {passive: false});
+els.evHandle.addEventListener('mousedown', (e) => { isDraggingEv = true; });
+evLine.addEventListener('touchstart', (e) => { isDraggingEv = true; setEv(e.touches[0].clientX); e.preventDefault(); }, {passive: false});
+evLine.addEventListener('mousedown', (e) => { isDraggingEv = true; setEv(e.clientX); });
+document.addEventListener('touchmove', (e) => { if(isDraggingEv) { setEv(e.touches[0].clientX); e.preventDefault(); } }, {passive: false});
+document.addEventListener('mousemove', (e) => { if(isDraggingEv) setEv(e.clientX); });
+document.addEventListener('touchend', () => { isDraggingEv = false; });
+document.addEventListener('mouseup', () => { isDraggingEv = false; });
+
+document.querySelectorAll('.mode-label').forEach(label => label.addEventListener('click', () => { state.mode = label.dataset.mode; calculateExposure(); }));
+els.panelHandle.addEventListener('click', () => els.controlsPanel.classList.toggle('collapsed'));
+
+let reviewTimeout;
+els.shutterBtn.addEventListener('click', () => {
+  if (state.isShooting) return; state.isShooting = true;
+  els.shutterFlash.classList.add('flash'); setTimeout(() => els.shutterFlash.classList.remove('flash'), 100);
+  setTimeout(() => {
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+    els.reviewImg.src = dataUrl; els.reviewImg.style.filter = canvas.style.filter;
+    document.getElementById('revInfoShutter').innerText = formatShutter(shutters[state.shutIdx]);
+    document.getElementById('revInfoAperture').innerText = 'f/' + apertures[state.aptIdx].toFixed(1);
+    document.getElementById('revInfoIso').innerText = 'ISO ' + isos[state.isoIdx];
+    document.getElementById('revInfoZoom').innerText = state.zoom + 'mm';
+    els.photoReview.classList.add('show');
+    let timeLeft = 4; els.reviewTimer.innerText = timeLeft + 'с';
+    reviewTimeout = setInterval(() => { timeLeft--; els.reviewTimer.innerText = timeLeft + 'с'; if (timeLeft <= 0) closeReview(); }, 1000);
+  }, 150);
+});
+
+function closeReview() {
+  clearInterval(reviewTimeout); els.photoReview.classList.remove('show'); state.isShooting = false;
+  setTimeout(() => { els.reviewImg.src = ''; els.reviewImg.style.filter = ''; }, 300);
+}
+els.retakeBtn.addEventListener('click', closeReview);
+
+calculateExposure();
+requestAnimationFrame(animate);
+</script>
+</body>
+</html>
